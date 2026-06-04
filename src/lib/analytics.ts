@@ -2,6 +2,16 @@ export function blogArticlePath(slug: string): string {
   return `/blog/${slug}`;
 }
 
+/** Normalize tracked paths so /blog/slug and /blog/slug/ map to the same article. */
+export function normalizePageViewPath(pathname: string): string {
+  let path = (pathname || "/").split(/[?#]/)[0];
+  if (path.startsWith("/blog/")) {
+    path = path.replace(/\/index\.html$/i, "");
+    path = path.replace(/\/+$/, "");
+  }
+  return path || "/";
+}
+
 export function shouldTrackPageView(pathname: string, method: string): boolean {
   if (method !== "GET") return false;
   if (pathname.startsWith("/api/")) return false;
@@ -18,7 +28,7 @@ export async function recordPageView(
   db: D1Database,
   pathname: string
 ): Promise<void> {
-  const path = pathname || "/";
+  const path = normalizePageViewPath(pathname);
   const viewDate = viewDateKey();
   await db
     .prepare(
@@ -53,7 +63,20 @@ export interface AdminStats {
 }
 
 export function articleIdFromBlogPath(path: string): string {
-  return path.replace(/^\/blog\//, "");
+  return normalizePageViewPath(path).replace(/^\/blog\//, "");
+}
+
+export function resolveBlogArticleTitle(
+  path: string,
+  titleBySlug: Map<string, string>
+): string {
+  const normalized = normalizePageViewPath(path);
+  const slug = articleIdFromBlogPath(normalized);
+  return titleBySlug.get(slug) ?? slug;
+}
+
+export function resolveBlogArticleHref(path: string): string {
+  return blogArticlePath(articleIdFromBlogPath(path));
 }
 
 export async function getCommentCountsByArticleIds(
@@ -181,11 +204,15 @@ export async function getAdminStats(db: D1Database): Promise<AdminStats> {
   const topArticlePaths = topArticlesRows.results ?? [];
   const articleIds = topArticlePaths.map((row) => articleIdFromBlogPath(row.path));
   const commentCounts = await getCommentCountsByArticleIds(db, articleIds);
-  const topArticles = topArticlePaths.map((row) => ({
-    path: row.path,
-    views: row.views,
-    commentCount: commentCounts.get(articleIdFromBlogPath(row.path)) ?? 0,
-  }));
+  const topArticles = topArticlePaths.map((row) => {
+    const path = normalizePageViewPath(row.path);
+    const slug = articleIdFromBlogPath(path);
+    return {
+      path,
+      views: row.views,
+      commentCount: commentCounts.get(slug) ?? 0,
+    };
+  });
 
   return {
     users: {

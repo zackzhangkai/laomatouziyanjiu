@@ -1,7 +1,12 @@
 ---
 import { getCollection } from "astro:content";
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { getAdminStats, type AdminStats } from "../../lib/analytics";
+import {
+  getAdminStats,
+  resolveBlogArticleHref,
+  resolveBlogArticleTitle,
+  type AdminStats,
+} from "../../lib/analytics";
 import { MEMBER_DURATION_DAYS } from "../../lib/member";
 import { getEnv } from "../../lib/env";
 
@@ -22,14 +27,12 @@ try {
 }
 
 const blogPosts = await getCollection("blog");
-const titleByPath = new Map(blogPosts.map((post) => [`/blog/${post.id}`, post.data.title]));
+const titleBySlug = new Map(
+  blogPosts.map((post) => [post.id, post.data.title.trim() || post.id])
+);
 
 function formatNum(n: number): string {
   return n.toLocaleString("zh-CN");
-}
-
-function articleTitle(path: string): string {
-  return titleByPath.get(path) ?? path.replace(/^\/blog\//, "");
 }
 ---
 
@@ -87,8 +90,8 @@ function articleTitle(path: string): string {
                   {stats.pageViews.topArticles.map((row) => (
                     <tr>
                       <td>
-                        <a href={row.path} class="data-table__title-link">
-                          {articleTitle(row.path)}
+                        <a href={resolveBlogArticleHref(row.path)} class="data-table__title-link">
+                          {resolveBlogArticleTitle(row.path, titleBySlug)}
                         </a>
                       </td>
                       <td>{formatNum(row.views)}</td>
