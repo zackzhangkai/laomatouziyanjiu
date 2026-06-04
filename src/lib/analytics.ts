@@ -48,8 +48,32 @@ export interface AdminStats {
     today: number;
     total: number;
     last7Days: Array<{ date: string; views: number }>;
-    topArticles: Array<{ path: string; views: number }>;
+    topArticles: Array<{ path: string; views: number; commentCount: number }>;
   };
+}
+
+export function articleIdFromBlogPath(path: string): string {
+  return path.replace(/^\/blog\//, "");
+}
+
+export async function getCommentCountsByArticleIds(
+  db: D1Database,
+  articleIds: string[]
+): Promise<Map<string, number>> {
+  if (articleIds.length === 0) return new Map();
+
+  const placeholders = articleIds.map(() => "?").join(", ");
+  const rows = await db
+    .prepare(
+      `SELECT article_id, COUNT(*) AS count
+       FROM comments
+       WHERE article_id IN (${placeholders})
+       GROUP BY article_id`
+    )
+    .bind(...articleIds)
+    .all<{ article_id: string; count: number }>();
+
+  return new Map((rows.results ?? []).map((row) => [row.article_id, row.count]));
 }
 
 export async function getViewCountsByPaths(
@@ -142,7 +166,7 @@ export async function getAdminStats(db: D1Database): Promise<AdminStats> {
     )
     .all<{ date: string; views: number }>();
 
-  const topArticles = await db
+  const topArticlesRows = await db
     .prepare(
       `SELECT path, SUM(views) AS views
        FROM page_views
@@ -153,6 +177,15 @@ export async function getAdminStats(db: D1Database): Promise<AdminStats> {
        LIMIT 10`
     )
     .all<{ path: string; views: number }>();
+
+  const topArticlePaths = topArticlesRows.results ?? [];
+  const articleIds = topArticlePaths.map((row) => articleIdFromBlogPath(row.path));
+  const commentCounts = await getCommentCountsByArticleIds(db, articleIds);
+  const topArticles = topArticlePaths.map((row) => ({
+    path: row.path,
+    views: row.views,
+    commentCount: commentCounts.get(articleIdFromBlogPath(row.path)) ?? 0,
+  }));
 
   return {
     users: {
@@ -172,7 +205,7 @@ export async function getAdminStats(db: D1Database): Promise<AdminStats> {
       today: viewsToday?.views ?? 0,
       total: viewsTotal?.views ?? 0,
       last7Days: last7.results ?? [],
-      topArticles: topArticles.results ?? [],
+      topArticles,
     },
   };
 }

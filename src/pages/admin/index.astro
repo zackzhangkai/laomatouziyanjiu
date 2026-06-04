@@ -80,15 +80,19 @@ function articleTitle(path: string): string {
                   <tr>
                     <th>文章</th>
                     <th>浏览量</th>
+                    <th>评论</th>
                   </tr>
                 </thead>
                 <tbody>
                   {stats.pageViews.topArticles.map((row) => (
                     <tr>
                       <td>
-                        <a href={row.path}>{articleTitle(row.path)}</a>
+                        <a href={row.path} class="data-table__title-link">
+                          {articleTitle(row.path)}
+                        </a>
                       </td>
                       <td>{formatNum(row.views)}</td>
+                      <td>{formatNum(row.commentCount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -232,6 +236,17 @@ function articleTitle(path: string): string {
   .data-table th {
     color: var(--ink-muted);
     font-weight: 500;
+  }
+
+  .data-table__title-link {
+    color: var(--ink);
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .data-table__title-link:hover {
+    color: var(--accent);
+    text-decoration: underline;
   }
 
   .table-wrap {
