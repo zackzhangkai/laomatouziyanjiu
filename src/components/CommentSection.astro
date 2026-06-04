@@ -1,0 +1,102 @@
+---
+interface Props {
+  articleId: string;
+}
+
+const { articleId } = Astro.props;
+const user = Astro.locals.user;
+---
+
+<section class="comments" id="comments" data-article-id={articleId}>
+  <h2>评论</h2>
+  <div id="comment-list" aria-live="polite"></div>
+
+  {user ? (
+    <form id="comment-form" class="card" style="margin-top: 1rem">
+      <div class="form-group">
+        <label for="comment-content">以 {user.username} 的身份评论</label>
+        <textarea id="comment-content" name="content" required maxlength="2000" placeholder="写下你的想法…"></textarea>
+      </div>
+      <button type="submit" class="btn">发表评论</button>
+      <p id="comment-error" class="alert alert--error" hidden></p>
+    </form>
+  ) : (
+    <p class="card" style="margin-top: 1rem; color: var(--ink-muted)">
+      请 <a href="/login">登录</a> 或 <a href="/register">注册</a> 后参与评论。
+    </p>
+  )}
+</section>
+
+<script define:vars={{ articleId }}>
+  const listEl = document.getElementById("comment-list");
+  const form = document.getElementById("comment-form");
+  const errorEl = document.getElementById("comment-error");
+
+  function formatDate(iso) {
+    try {
+      return new Date(iso).toLocaleString("zh-CN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+    } catch {
+      return iso;
+    }
+  }
+
+  async function loadComments() {
+    const res = await fetch(`/api/comments?article_id=${encodeURIComponent(articleId)}`);
+    const data = await res.json();
+    const comments = data.comments ?? [];
+
+    if (!comments.length) {
+      listEl.innerHTML = '<p style="color: var(--ink-muted)">暂无评论，来抢沙发吧。</p>';
+      return;
+    }
+
+    listEl.innerHTML = comments
+      .map(
+        (c) => `
+      <article class="comment">
+        <div class="comment__meta">
+          <strong>${escapeHtml(c.username)}</strong>
+          · ${formatDate(c.created_at)}
+        </div>
+        <p>${escapeHtml(c.content)}</p>
+      </article>`
+      )
+      .join("");
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  loadComments();
+
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorEl.hidden = true;
+    const content = document.getElementById("comment-content").value.trim();
+    if (!content) return;
+
+    const res = await fetch("/api/comments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ article_id: articleId, content }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      errorEl.textContent = data.error ?? "发表失败";
+      errorEl.hidden = false;
+      return;
+    }
+
+    document.getElementById("comment-content").value = "";
+    await loadComments();
+  });
+</script>

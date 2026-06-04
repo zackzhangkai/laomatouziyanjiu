@@ -1,0 +1,149 @@
+---
+import "../styles/global.css";
+import { SOCIAL } from "../lib/social";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = "老马投资研究 — 周期视角下的行业投研与交易心得" } = Astro.props;
+const user = Astro.locals.user;
+const pageTitle = title === "老马投资研究" ? title : `${title} · 老马投资研究`;
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{pageTitle}</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a href="/" class="site-brand">
+          <span class="site-brand__mark">老马投资研究</span>
+          <span class="site-brand__sub">LMD Research</span>
+        </a>
+        <nav class="site-nav">
+          <a href="/">研报</a>
+          <a href="/member">会员专区</a>
+          <a
+            href={SOCIAL.telegram.href}
+            class="nav-cta nav-cta--telegram"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Telegram
+          </a>
+          <a href={SOCIAL.twitter.href} target="_blank" rel="noopener noreferrer">X</a>
+          {user ? (
+            <>
+              {user.role === "admin" && (
+                <>
+                  <a href="/admin">后台</a>
+                  <a href="/admin/new-post">发布</a>
+                </>
+              )}
+              <span class="nav-user">{user.username}</span>
+              <button type="button" class="btn btn--ghost" id="logout-btn" style="padding: 0.35rem 0.7rem; font-size: 0.75rem">
+                退出
+              </button>
+            </>
+          ) : (
+            <>
+              <a href="/login">登录</a>
+              <a href="/register">注册</a>
+            </>
+          )}
+        </nav>
+      </div>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <div class="site-footer__social">
+        <a
+          href={SOCIAL.telegram.href}
+          class="site-footer__link site-footer__link--primary"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Telegram {SOCIAL.telegram.handle}
+        </a>
+        <span class="site-footer__sep">·</span>
+        <a
+          href={SOCIAL.twitter.href}
+          class="site-footer__link"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          X {SOCIAL.twitter.handle}
+        </a>
+      </div>
+      <p>
+        <strong>老马投资研究</strong>（{SOCIAL.twitter.handle}）— 专职投资者的思考与记录，从周期视角聚焦前沿科技产业化。
+        优先加入 Telegram 获取最新观点。本站内容不构成投资建议，入市风险自负。
+      </p>
+    </footer>
+    <script define:vars={{ telegramHref: SOCIAL.telegram.href, twitterHref: SOCIAL.twitter.href }}>
+      document.getElementById("logout-btn")?.addEventListener("click", async () => {
+        await fetch("/api/auth/logout", { method: "POST" });
+        location.href = "/";
+      });
+
+      (async () => {
+        const nav = document.querySelector(".site-nav");
+        if (!nav || nav.querySelector("#logout-btn")) return;
+        try {
+          const res = await fetch("/api/auth/me");
+          const { user } = await res.json();
+          if (!user) return;
+          const adminLink =
+            user.role === "admin"
+              ? '<a href="/admin">后台</a><a href="/admin/new-post">发布</a>'
+              : "";
+          const socialLinks = `
+            <a href="${telegramHref}" class="nav-cta nav-cta--telegram" target="_blank" rel="noopener noreferrer">Telegram</a>
+            <a href="${twitterHref}" target="_blank" rel="noopener noreferrer">X</a>
+          `;
+          nav.innerHTML = `
+            <a href="/">研报</a>
+            <a href="/member">会员专区</a>
+            ${socialLinks}
+            ${adminLink}
+            <span class="nav-user">${user.username}</span>
+            <button type="button" class="btn btn--ghost" id="logout-btn" style="padding: 0.35rem 0.7rem; font-size: 0.75rem">退出</button>
+          `;
+          document.getElementById("logout-btn")?.addEventListener("click", async () => {
+            await fetch("/api/auth/logout", { method: "POST" });
+            location.href = "/";
+          });
+        } catch {}
+      })();
+
+      (function () {
+        const path = location.pathname;
+        if (path.startsWith("/api/") || path.startsWith("/_astro/")) return;
+        const payload = JSON.stringify({ path });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(
+            "/api/analytics/view",
+            new Blob([payload], { type: "application/json" })
+          );
+          return;
+        }
+        fetch("/api/analytics/view", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      })();
+    </script>
+  </body>
+</html>

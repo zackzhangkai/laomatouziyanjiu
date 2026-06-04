@@ -1,0 +1,58 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const user = Astro.locals.user;
+if (user) {
+  return Astro.redirect("/");
+}
+---
+
+<BaseLayout title="注册">
+  <h1 class="page-title">注册</h1>
+  <p class="page-lead">
+    注册后可参与评论与讨论。已有账号请直接
+    <a href="/login">登录</a>。
+  </p>
+
+  <form id="register-form" class="card" style="margin-top: 1.5rem; max-width: 400px">
+    <div class="form-group">
+      <label for="username">用户名</label>
+      <input id="username" name="username" required minlength="2" autocomplete="username" />
+    </div>
+    <div class="form-group">
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password" required minlength="6" autocomplete="new-password" />
+    </div>
+    <p id="register-error" class="alert alert--error" hidden></p>
+    <button type="submit" class="btn">注册</button>
+    <p style="margin-top: 1rem; font-size: 0.9rem">
+      已有账号？<a href="/login">登录</a>
+    </p>
+  </form>
+</BaseLayout>
+
+<script>
+  document.getElementById("register-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("register-error");
+    err.hidden = true;
+
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      err.textContent = data.error ?? "注册失败";
+      err.hidden = false;
+      return;
+    }
+
+    location.href = "/";
+  });
+</script>

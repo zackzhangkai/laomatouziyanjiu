@@ -1,0 +1,303 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getEnv } from "../../lib/env";
+import {
+  getMemberContact,
+  listMemberContacts,
+  type MemberContact,
+} from "../../lib/member-contacts";
+import { MEMBER_DURATION_DAYS } from "../../lib/member";
+
+export const prerender = false;
+
+const memberSession = Astro.locals.member;
+let memberContact: MemberContact | null = null;
+let gateContacts: MemberContact[] = [];
+
+try {
+  const env = getEnv(Astro);
+  if (memberSession) {
+    memberContact = await getMemberContact(env.DB, memberSession.contactId);
+  } else {
+    gateContacts = await listMemberContacts(env.DB);
+  }
+} catch {
+  // runtime 未就绪时由客户端 /api/member/me 同步
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+---
+
+<BaseLayout title="会员专区" description="会员专属交流通道，使用管理员发放的会员码进入">
+  <h1 class="page-title">会员专区</h1>
+
+  {memberContact && memberSession ? (
+    <div id="member-content">
+      <p class="page-lead">
+        欢迎进入会员专区。你的会员有效期至
+        <strong>{formatDate(memberSession.expiresAt)}</strong>（共 {MEMBER_DURATION_DAYS} 天）。
+      </p>
+
+      <div class="card member-contact-card" style="margin-top: 1.5rem">
+        <p class="member-contact-card__badge">你的专属对接</p>
+        <h2 class="member-contact-card__name">{memberContact.name}</h2>
+        <p class="member-contact-card__role">{memberContact.role}</p>
+        <p style="color: var(--ink-muted); margin: 0.75rem 0 1.25rem">
+          {memberContact.description}
+        </p>
+        <div class="member-contact-card__actions">
+          <a
+            href={memberContact.telegram.href}
+            class="btn btn--telegram"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Telegram 私信 {memberContact.telegram.handle}
+          </a>
+          {memberContact.twitter && (
+            <a
+              href={memberContact.twitter.href}
+              class="btn btn--ghost"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              X {memberContact.twitter.handle}
+            </a>
+          )}
+        </div>
+        <p class="member-contact-card__hint">
+          点击上方按钮即可直接与对接人私信沟通，请简要说明你的会员身份与咨询主题。
+        </p>
+      </div>
+    </div>
+  ) : (
+    <div id="member-gate">
+      <p class="page-lead">
+        会员专区面向受邀读者开放。请输入管理员提供的会员码进入，激活后有效期为
+        <strong>{MEMBER_DURATION_DAYS} 天</strong>。
+      </p>
+
+      <form id="member-form" class="card" style="margin-top: 1.5rem; max-width: 420px">
+        <div class="form-group">
+          <label for="member-code">会员码</label>
+          <input
+            id="member-code"
+            name="code"
+            required
+            autocomplete="off"
+            placeholder="例如 LMD-ABCD-1234"
+            style="font-family: var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase"
+          />
+        </div>
+        <p id="member-error" class="alert alert--error" hidden></p>
+        <button type="submit" class="btn">进入会员专区</button>
+      </form>
+
+      {gateContacts.length > 0 ? (
+        <div class="member-gate-contacts" style="margin-top: 2rem">
+          <h2 class="member-gate-contacts__title">还没有会员码？联系以下对接人获取</h2>
+          <div class="member-gate-contacts__list">
+            {gateContacts.map((contact) => (
+              <div class="card member-contact-card">
+                <p class="member-contact-card__badge">对接人</p>
+                <h3 class="member-contact-card__name">{contact.name}</h3>
+                <p class="member-contact-card__role">{contact.role}</p>
+                {contact.description && (
+                  <p style="color: var(--ink-muted); margin: 0.75rem 0 1.25rem">
+                    {contact.description}
+                  </p>
+                )}
+                <div class="member-contact-card__actions">
+                  <a
+                    href={contact.telegram.href}
+                    class="btn btn--telegram"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Telegram 私信 {contact.telegram.handle}
+                  </a>
+                  {contact.twitter && (
+                    <a
+                      href={contact.twitter.href}
+                      class="btn btn--ghost"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      X {contact.twitter.handle}
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p style="margin-top: 1.25rem; color: var(--ink-muted); font-size: 0.9rem">
+          还没有会员码？请联系管理员获取。
+        </p>
+      )}
+    </div>
+  )}
+</BaseLayout>
+
+<script>
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function renderGateContact(contact) {
+    const twitterBtn = contact.twitter
+      ? `<a href="${escapeHtml(contact.twitter.href)}" class="btn btn--ghost" target="_blank" rel="noopener noreferrer">X ${escapeHtml(contact.twitter.handle)}</a>`
+      : "";
+    const desc = contact.description
+      ? `<p style="color: var(--ink-muted); margin: 0.75rem 0 1.25rem">${escapeHtml(contact.description)}</p>`
+      : "";
+
+    return `
+      <div class="card member-contact-card">
+        <p class="member-contact-card__badge">对接人</p>
+        <h3 class="member-contact-card__name">${escapeHtml(contact.name)}</h3>
+        <p class="member-contact-card__role">${escapeHtml(contact.role)}</p>
+        ${desc}
+        <div class="member-contact-card__actions">
+          <a href="${escapeHtml(contact.telegram.href)}" class="btn btn--telegram" target="_blank" rel="noopener noreferrer">
+            Telegram 私信 ${escapeHtml(contact.telegram.handle)}
+          </a>
+          ${twitterBtn}
+        </div>
+      </div>
+    `;
+  }
+
+  async function loadGateContacts() {
+    const container = document.querySelector(".member-gate-contacts");
+    if (container?.children.length) return;
+
+    try {
+      const res = await fetch("/api/member/gate-contacts");
+      const { contacts } = await res.json();
+      if (!contacts?.length) return;
+
+      const gate = document.getElementById("member-gate");
+      const fallback = gate?.querySelector(":scope > p:last-child");
+      fallback?.remove();
+
+      const section = document.createElement("div");
+      section.className = "member-gate-contacts";
+      section.style.marginTop = "2rem";
+      section.innerHTML = `
+        <h2 class="member-gate-contacts__title">还没有会员码？联系以下对接人获取</h2>
+        <div class="member-gate-contacts__list">
+          ${contacts.map(renderGateContact).join("")}
+        </div>
+      `;
+      gate?.appendChild(section);
+    } catch {}
+  }
+
+  const memberContent = document.getElementById("member-content");
+  if (!memberContent) {
+    loadGateContacts();
+
+    document.getElementById("member-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("member-error");
+      err.hidden = true;
+
+      const input = document.getElementById("member-code");
+      const code = input?.value?.trim();
+      if (!code) return;
+
+      const res = await fetch("/api/member/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        err.textContent = data.error ?? "验证失败";
+        err.hidden = false;
+        return;
+      }
+
+      location.reload();
+    });
+
+    (async () => {
+      try {
+        const res = await fetch("/api/member/me");
+        const { member } = await res.json();
+        if (member) location.reload();
+      } catch {}
+    })();
+  }
+</script>
+
+<style>
+  .member-contact-card {
+    border-color: var(--border-gold);
+    background: linear-gradient(145deg, var(--bg-card), rgba(201, 162, 39, 0.06));
+  }
+
+  .member-contact-card__badge {
+    margin: 0;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+
+  .member-contact-card__name {
+    margin: 0.35rem 0 0;
+    font-family: var(--font-serif);
+    font-size: 1.75rem;
+    color: var(--gold-light);
+  }
+
+  .member-contact-card__role {
+    margin: 0.25rem 0 0;
+    color: var(--ink-muted);
+    font-size: 0.95rem;
+  }
+
+  .member-contact-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .member-contact-card__hint {
+    margin: 1rem 0 0;
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+  }
+
+  .member-gate-contacts__title {
+    margin: 0 0 1rem;
+    font-family: var(--font-serif);
+    font-size: 1.25rem;
+    color: var(--ink-muted);
+    font-weight: 400;
+  }
+
+  .member-gate-contacts__list {
+    display: grid;
+    gap: 1rem;
+    max-width: 520px;
+  }
+
+  .member-gate-contacts .member-contact-card__name {
+    font-size: 1.35rem;
+  }
+</style>

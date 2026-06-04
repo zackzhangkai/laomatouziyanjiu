@@ -1,0 +1,27 @@
+name: Twitter auto sync
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger X article sync on production
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://laomatouziyanjiu.pages.dev' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET not configured in GitHub repository secrets"
+            exit 1
+          fi
+          res=$(curl -sS -w "\n%{http_code}" -X POST "${SITE_URL}/api/twitter/sync" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json")
+          code=$(echo "$res" | tail -n1)
+          body=$(echo "$res" | sed '$d')
+          echo "$body"
+          test "$code" -ge 200 && test "$code" -lt 300

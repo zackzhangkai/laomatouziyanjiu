@@ -1,0 +1,62 @@
+---
+export const prerender = true;
+
+import { getCollection, render } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import CommentSection from "../../components/CommentSection.astro";
+import CommunityCta from "../../components/CommunityCta.astro";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("blog");
+  return posts
+    .filter((p) => !p.data.draft)
+    .map((post) => ({
+      params: { slug: post.id },
+      props: { post },
+    }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const articleId = post.id;
+const dateStr = post.data.pubDate.toLocaleDateString("zh-CN", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+---
+
+<BaseLayout title={post.data.title} description={post.data.description}>
+  <article>
+    <header class="report-header">
+      <div class="report-header__row">
+        <span class="pill pill--gold">投研报告</span>
+        <span class="pill pill--category">{post.data.category ?? "投研"}</span>
+        {post.data.tags?.map((tag) => (
+          <span class="pill">{tag}</span>
+        ))}
+      </div>
+      <h1>{post.data.title}</h1>
+      {post.data.description && (
+        <p class="report-header__abstract">{post.data.description}</p>
+      )}
+      <div class="report-header__byline">
+        <span><strong>作者</strong> {post.data.author ?? "老马投资研究"}</span>
+        <span><strong>日期</strong> {dateStr}</span>
+        <span><strong>栏目</strong> {post.data.category ?? "行业研究"}</span>
+      </div>
+      {post.data.source && (
+        <p class="report-source">
+          原文：<a href={post.data.source} target="_blank" rel="noopener noreferrer">X @LMDFinance</a>
+        </p>
+      )}
+    </header>
+    <div class="prose">
+      <Content />
+    </div>
+  </article>
+
+  <CommunityCta variant="inline" />
+
+  <CommentSection articleId={articleId} />
+</BaseLayout>

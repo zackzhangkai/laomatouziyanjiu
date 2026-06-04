@@ -1,0 +1,39 @@
+---
+import { SOCIAL } from "../lib/social";
+
+interface Props {
+  variant?: "hero" | "inline" | "compact";
+}
+
+const { variant = "inline" } = Astro.props;
+---
+
+<section class={`community-cta community-cta--${variant}`} aria-label="加入社区">
+  {variant !== "compact" && (
+    <p class="community-cta__label">加入社区 · 第一时间获取观点</p>
+  )}
+  <div class="community-cta__actions">
+    <a
+      href={SOCIAL.telegram.href}
+      class="btn btn--telegram"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <svg class="community-cta__icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+        <path d="M9.417 15.181l-.397 5.584c.568 0 .814-.244 1.109-.537l2.663-2.545 5.518 4.041c1.012.564 1.725.267 1.998-.931L23.93 3.821c.321-1.431-.541-1.988-1.354-1.625L1.114 10.338c-1.325.541-1.304 1.315-.24 1.662l4.742 1.481 11.022-6.952c.518-.317.991-.142.602.192" />
+      </svg>
+      加入 Telegram {SOCIAL.telegram.handle}
+    </a>
+    <a
+      href={SOCIAL.twitter.href}
+      class="btn btn--ghost community-cta__secondary"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      关注 {SOCIAL.twitter.label} {SOCIAL.twitter.handle}
+    </a>
+  </div>
+  {variant === "hero" && (
+    <p class="community-cta__hint">Telegram 频道同步更新投研观点与互动讨论，推荐优先加入。</p>
+  )}
+</section>

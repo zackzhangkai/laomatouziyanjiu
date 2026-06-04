@@ -1,0 +1,359 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+if (user.role !== "admin") {
+  return Astro.redirect("/");
+}
+---
+
+<BaseLayout title="对接联系人">
+  <h1 class="page-title">对接联系人</h1>
+  <p class="page-lead">
+    配置会员专区显示的对接人与私信链接。未填写会员码的访客会在会员专区看到以下联系人；激活后则显示该会员码绑定的专属对接人。
+  </p>
+
+  <div id="contacts-loading" class="card" style="margin-top: 1.5rem; color: var(--ink-muted)">
+    加载中…
+  </div>
+  <div id="contacts-list" hidden></div>
+
+  <div class="card" style="margin-top: 1.5rem">
+    <h2 style="margin-top: 0">新增对接人</h2>
+    <form id="create-contact-form" class="contact-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="new-id">标识</label>
+          <input id="new-id" required pattern="[a-z0-9-]+" placeholder="例如 assistant" />
+          <span class="field-hint">小写字母、数字、连字符，创建后不可改</span>
+        </div>
+        <div class="form-group">
+          <label for="new-name">姓名</label>
+          <input id="new-name" required placeholder="例如 老马" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="new-role">角色</label>
+        <input id="new-role" required placeholder="例如 主理人" />
+      </div>
+      <div class="form-group">
+        <label for="new-description">说明</label>
+        <textarea id="new-description" rows="2" placeholder="会员看到的简介"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="new-telegram-handle">Telegram 显示名</label>
+          <input id="new-telegram-handle" required placeholder="@username" />
+        </div>
+        <div class="form-group">
+          <label for="new-telegram-href">Telegram 私信链接</label>
+          <input id="new-telegram-href" required placeholder="https://t.me/username" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="new-twitter-handle">X 显示名（可选）</label>
+          <input id="new-twitter-handle" placeholder="@username" />
+        </div>
+        <div class="form-group">
+          <label for="new-twitter-href">X 链接（可选）</label>
+          <input id="new-twitter-href" placeholder="https://x.com/username" />
+        </div>
+      </div>
+      <p id="create-error" class="alert alert--error" hidden></p>
+      <button type="submit" class="btn">添加对接人</button>
+    </form>
+  </div>
+
+  <p style="margin-top: 1.5rem">
+    <a href="/admin/member-codes">会员码管理</a>
+    <span style="margin: 0 0.5rem">·</span>
+    <a href="/admin">返回管理后台</a>
+  </p>
+</BaseLayout>
+
+<script>
+  function contactFormHtml(contact) {
+    const codeHint =
+      contact.codeCount > 0
+        ? `<p class="contact-form__usage">已被 ${contact.codeCount} 个会员码引用，需先处理相关会员码后才能删除</p>`
+        : "";
+    const deleteDisabled = contact.codeCount > 0 ? "disabled" : "";
+    return `
+      <form class="card contact-form contact-edit-form" data-id="${contact.id}" style="margin-top: 1rem">
+        <div class="contact-form__header">
+          <div>
+            <h2 style="margin: 0">${contact.name}</h2>
+            <code>${contact.id}</code>
+          </div>
+          <button
+            type="button"
+            class="btn btn--danger btn--ghost contact-delete-btn"
+            data-id="${contact.id}"
+            data-name="${escapeAttr(contact.name)}"
+            ${deleteDisabled}
+          >删除</button>
+        </div>
+        ${codeHint}
+        <div class="form-row">
+          <div class="form-group">
+            <label>姓名</label>
+            <input name="name" required value="${escapeAttr(contact.name)}" />
+          </div>
+          <div class="form-group">
+            <label>角色</label>
+            <input name="role" required value="${escapeAttr(contact.role)}" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>说明</label>
+          <textarea name="description" rows="2">${escapeHtml(contact.description ?? "")}</textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Telegram 显示名</label>
+            <input name="telegramHandle" required value="${escapeAttr(contact.telegram.handle)}" />
+          </div>
+          <div class="form-group">
+            <label>Telegram 私信链接</label>
+            <input name="telegramHref" required value="${escapeAttr(contact.telegram.href)}" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>X 显示名（可选）</label>
+            <input name="twitterHandle" value="${escapeAttr(contact.twitter?.handle ?? "")}" />
+          </div>
+          <div class="form-group">
+            <label>X 链接（可选）</label>
+            <input name="twitterHref" value="${escapeAttr(contact.twitter?.href ?? "")}" />
+          </div>
+        </div>
+        <p class="form-message alert alert--error" hidden></p>
+        <p class="form-message alert alert--success" hidden></p>
+        <div class="contact-form__actions">
+          <button type="submit" class="btn">保存修改</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function escapeAttr(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;");
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function readFormData(form) {
+    const data = Object.fromEntries(new FormData(form));
+    return {
+      id: String(data.id ?? form.dataset.id ?? ""),
+      name: String(data.name ?? ""),
+      role: String(data.role ?? ""),
+      description: String(data.description ?? ""),
+      telegramHandle: String(data.telegramHandle ?? ""),
+      telegramHref: String(data.telegramHref ?? ""),
+      twitterHandle: String(data.twitterHandle ?? ""),
+      twitterHref: String(data.twitterHref ?? ""),
+    };
+  }
+
+  async function loadContacts() {
+    const loading = document.getElementById("contacts-loading");
+    const list = document.getElementById("contacts-list");
+
+    try {
+      const res = await fetch("/api/member/contacts");
+      const data = await res.json();
+      loading.hidden = true;
+
+      if (!res.ok) {
+        loading.textContent = data.error ?? "加载失败";
+        loading.hidden = false;
+        return;
+      }
+
+      const contacts = data.contacts ?? [];
+      list.hidden = false;
+      list.innerHTML =
+        contacts.length === 0
+          ? `<p style="color: var(--ink-muted)">暂无对接人，请先添加。</p>`
+          : contacts.map((c) => contactFormHtml(c)).join("");
+
+      list.querySelectorAll(".contact-edit-form").forEach((form) => {
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const err = form.querySelector(".alert--error");
+          const ok = form.querySelector(".alert--success");
+          err.hidden = true;
+          ok.hidden = true;
+
+          const res = await fetch("/api/member/contacts", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(readFormData(form)),
+          });
+          const data = await res.json();
+
+          if (!res.ok) {
+            err.textContent = data.error ?? "保存失败";
+            err.hidden = false;
+            return;
+          }
+
+          ok.textContent = "已保存";
+          ok.hidden = false;
+          loadContacts();
+        });
+      });
+
+      list.querySelectorAll(".contact-delete-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (btn.disabled) return;
+
+          const id = btn.dataset.id;
+          const name = btn.dataset.name;
+          if (!id) return;
+
+          const confirmed = confirm(`确定删除对接人「${name}」？此操作不可恢复。`);
+          if (!confirmed) return;
+
+          const form = btn.closest(".contact-edit-form");
+          const err = form?.querySelector(".alert--error");
+          const ok = form?.querySelector(".alert--success");
+          err.hidden = true;
+          ok.hidden = true;
+
+          const res = await fetch(`/api/member/contacts?id=${encodeURIComponent(id)}`, {
+            method: "DELETE",
+          });
+          const data = await res.json();
+
+          if (!res.ok) {
+            err.textContent = data.error ?? "删除失败";
+            err.hidden = false;
+            return;
+          }
+
+          loadContacts();
+        });
+      });
+    } catch {
+      loading.textContent = "加载失败";
+    }
+  }
+
+  document.getElementById("create-contact-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("create-error");
+    err.hidden = true;
+
+    const payload = {
+      id: document.getElementById("new-id").value.trim().toLowerCase(),
+      name: document.getElementById("new-name").value.trim(),
+      role: document.getElementById("new-role").value.trim(),
+      description: document.getElementById("new-description").value.trim(),
+      telegramHandle: document.getElementById("new-telegram-handle").value.trim(),
+      telegramHref: document.getElementById("new-telegram-href").value.trim(),
+      twitterHandle: document.getElementById("new-twitter-handle").value.trim(),
+      twitterHref: document.getElementById("new-twitter-href").value.trim(),
+    };
+
+    const res = await fetch("/api/member/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      err.textContent = data.error ?? "添加失败";
+      err.hidden = false;
+      return;
+    }
+
+    e.target.reset();
+    loadContacts();
+  });
+
+  loadContacts();
+</script>
+
+<style>
+  .form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+
+  .field-hint {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+  }
+
+  textarea {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: var(--ink);
+    font: inherit;
+    resize: vertical;
+  }
+
+  .contact-form__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .contact-form__usage {
+    margin: -0.25rem 0 1rem;
+    font-size: 0.85rem;
+    color: var(--ink-muted);
+  }
+
+  .contact-form__actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .btn--danger {
+    color: #e57373;
+    border-color: rgba(229, 115, 115, 0.35);
+  }
+
+  .btn--danger:hover:not(:disabled) {
+    background: rgba(229, 115, 115, 0.12);
+  }
+
+  .btn--danger:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .alert--success {
+    color: #81c784;
+    background: rgba(76, 175, 80, 0.1);
+    border: 1px solid rgba(76, 175, 80, 0.25);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
+  }
+</style>

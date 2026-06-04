@@ -1,0 +1,240 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getAdminStats, type AdminStats } from "../../lib/analytics";
+import { MEMBER_DURATION_DAYS } from "../../lib/member";
+import { getEnv } from "../../lib/env";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+if (user.role !== "admin") {
+  return Astro.redirect("/");
+}
+
+let stats: AdminStats | null = null;
+try {
+  const env = getEnv(Astro);
+  stats = await getAdminStats(env.DB);
+} catch {
+  stats = null;
+}
+
+const blogPosts = await getCollection("blog");
+const titleByPath = new Map(blogPosts.map((post) => [`/blog/${post.id}`, post.data.title]));
+
+function formatNum(n: number): string {
+  return n.toLocaleString("zh-CN");
+}
+
+function articleTitle(path: string): string {
+  return titleByPath.get(path) ?? path.replace(/^\/blog\//, "");
+}
+---
+
+<BaseLayout title="管理后台">
+  <h1 class="page-title">管理后台</h1>
+  <p>
+    你好，<strong>{user.username}</strong>
+    <span class="admin-badge">管理员</span>
+  </p>
+
+  <section class="admin-dashboard" style="margin-top: 1.5rem">
+    <h2 class="admin-dashboard__heading">数据概览</h2>
+    {stats ? (
+      <>
+        <div class="admin-stat-grid">
+          <div class="admin-stat-card">
+            <p class="admin-stat-card__label">注册用户</p>
+            <p class="admin-stat-card__value">{formatNum(stats.users.total)}</p>
+            <p class="admin-stat-card__meta">
+              普通用户 {formatNum(stats.users.regular)} · 近 7 日新增 {formatNum(stats.users.registeredLast7Days)}
+            </p>
+          </div>
+          <div class="admin-stat-card">
+            <p class="admin-stat-card__label">今日访问</p>
+            <p class="admin-stat-card__value">{formatNum(stats.pageViews.today)}</p>
+            <p class="admin-stat-card__meta">累计 {formatNum(stats.pageViews.total)} 次页面浏览</p>
+          </div>
+          <div class="admin-stat-card">
+            <p class="admin-stat-card__label">会员码</p>
+            <p class="admin-stat-card__value">{formatNum(stats.memberCodes.total)}</p>
+            <p class="admin-stat-card__meta">
+              已激活 {formatNum(stats.memberCodes.redeemed)} · 有效中 {formatNum(stats.memberCodes.active)} · 未使用 {formatNum(stats.memberCodes.unused)}
+            </p>
+          </div>
+          <div class="admin-stat-card">
+            <p class="admin-stat-card__label">评论</p>
+            <p class="admin-stat-card__value">{formatNum(stats.comments.total)}</p>
+            <p class="admin-stat-card__meta">全站评论总数</p>
+          </div>
+        </div>
+
+        {stats.pageViews.topArticles.length > 0 && (
+          <div class="card" style="margin-top: 1rem">
+            <h3 style="margin-top: 0">热门文章</h3>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>文章</th>
+                    <th>浏览量</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.pageViews.topArticles.map((row) => (
+                    <tr>
+                      <td>
+                        <a href={row.path}>{articleTitle(row.path)}</a>
+                      </td>
+                      <td>{formatNum(row.views)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </>
+    ) : (
+      <div id="stats-loading" class="card">
+        <p style="color: var(--ink-muted); margin: 0">加载统计数据…</p>
+      </div>
+    )}
+  </section>
+
+  <section style="margin-top: 2rem">
+    <h2 class="admin-dashboard__heading">功能入口</h2>
+    <div class="admin-action-grid">
+      <div class="card admin-action-card">
+        <h3 style="margin-top: 0">发布文章</h3>
+        <p style="color: var(--ink-muted)">
+          撰写并发布新的投研文章，读者可在首页研报栏目阅读。正文支持直接粘贴图片。
+        </p>
+        <a href="/admin/new-post" class="btn" style="margin-top: 0.5rem">➕ 发布新文章</a>
+      </div>
+
+      <div class="card admin-action-card">
+        <h3 style="margin-top: 0">会员码</h3>
+        <p style="color: var(--ink-muted)">
+          生成会员码并指定对接联系人，会员凭码进入专区（有效期 {MEMBER_DURATION_DAYS} 天）。
+        </p>
+        <a href="/admin/member-codes" class="btn" style="margin-top: 0.5rem">🔑 管理会员码</a>
+      </div>
+
+      <div class="card admin-action-card">
+        <h3 style="margin-top: 0">对接联系人</h3>
+        <p style="color: var(--ink-muted)">
+          配置会员专区显示的对接人与 Telegram / X 私信链接。
+        </p>
+        <a href="/admin/member-contacts" class="btn" style="margin-top: 0.5rem">👤 管理对接人</a>
+      </div>
+
+      <div class="card admin-action-card">
+        <h3 style="margin-top: 0">从 X 导入</h3>
+        <p style="color: var(--ink-muted)">
+          导入 @LMDFinance 的 X 长文与 #老马行业研究 帖子，自动保留图片。
+        </p>
+        <a href="/admin/import-twitter" class="btn" style="margin-top: 0.5rem">📥 导入 X 文章</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<script>
+  (async () => {
+    const loading = document.getElementById("stats-loading");
+    if (!loading) return;
+    try {
+      const res = await fetch("/api/admin/stats");
+      if (!res.ok) {
+        loading.innerHTML = '<p class="alert alert--error" style="margin:0">无法加载统计数据</p>';
+        return;
+      }
+      const { stats } = await res.json();
+      location.reload();
+    } catch {
+      loading.innerHTML = '<p class="alert alert--error" style="margin:0">无法加载统计数据</p>';
+    }
+  })();
+</script>
+
+<style>
+  .admin-dashboard__heading {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 0 0 1rem;
+  }
+
+  .admin-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .admin-stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.35rem;
+  }
+
+  .admin-stat-card__label {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .admin-stat-card__value {
+    margin: 0.35rem 0 0;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .admin-stat-card__meta {
+    margin: 0.5rem 0 0;
+    font-size: 0.82rem;
+    color: var(--ink-muted);
+    line-height: 1.45;
+  }
+
+  .admin-action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+
+  .admin-action-card h3 {
+    font-size: 1.05rem;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .data-table th {
+    color: var(--ink-muted);
+    font-weight: 500;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+</style>

@@ -1,0 +1,162 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+if (user.role !== "admin") {
+  return Astro.redirect("/");
+}
+---
+
+<BaseLayout title="发布新文章">
+  <h1 class="page-title">发布新文章</h1>
+  <p class="page-lead">
+    填写标题与正文后发布，新文章通常会在几分钟内出现在研报栏目。
+    正文支持直接粘贴图片（Ctrl/Cmd+V）。
+  </p>
+
+  <form id="publish-form" class="card" style="margin-top: 1.5rem">
+    <div class="form-group">
+      <label for="title">标题</label>
+      <input id="title" name="title" required placeholder="文章标题" />
+    </div>
+    <div class="form-group">
+      <label for="slug">文章链接名（英文小写，单词之间用连字符）</label>
+      <input id="slug" name="slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="hangye-yanjiu-2024" />
+    </div>
+    <div class="form-group">
+      <label for="description">摘要（可选）</label>
+      <input id="description" name="description" placeholder="一句话描述" />
+    </div>
+    <div class="form-group">
+      <label for="body">正文</label>
+      <textarea
+        id="body"
+        name="body"
+        required
+        rows="16"
+        placeholder="在这里撰写文章正文。段落之间空一行即可。可直接粘贴截图或图片。"
+      ></textarea>
+      <p id="paste-status" class="editor-hint" hidden></p>
+    </div>
+    <p id="publish-error" class="alert alert--error" hidden></p>
+    <p id="publish-success" class="alert alert--success" hidden></p>
+    <button type="submit" class="btn">发布文章</button>
+    <a href="/admin" class="btn btn--ghost" style="margin-left: 0.5rem">返回</a>
+  </form>
+</BaseLayout>
+
+<script>
+  const titleInput = document.getElementById("title");
+  const slugInput = document.getElementById("slug");
+  const bodyInput = document.getElementById("body");
+  const pasteStatus = document.getElementById("paste-status");
+  let slugTouched = false;
+
+  titleInput?.addEventListener("input", () => {
+    if (slugTouched) return;
+    const slug = titleInput.value
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s-]/gu, "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+    slugInput.value = slug;
+  });
+
+  slugInput?.addEventListener("input", () => {
+    slugTouched = true;
+  });
+
+  function insertAtCursor(textarea, text) {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    textarea.value = `${before}${text}${after}`;
+    const pos = start + text.length;
+    textarea.selectionStart = textarea.selectionEnd = pos;
+    textarea.focus();
+  }
+
+  bodyInput?.addEventListener("paste", async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (!item.type.startsWith("image/")) continue;
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (!file) continue;
+
+      pasteStatus.hidden = false;
+      pasteStatus.textContent = "正在上传图片…";
+
+      const reader = new FileReader();
+      const dataUrl = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      try {
+        const res = await fetch("/api/upload-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            data: dataUrl,
+            filename: file.name || `paste-${Date.now()}.png`,
+            mimeType: file.type,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "上传失败");
+
+        const snippet = `\n${data.markdown}\n`;
+        insertAtCursor(bodyInput, snippet);
+        pasteStatus.textContent = "图片已插入正文";
+        setTimeout(() => {
+          pasteStatus.hidden = true;
+        }, 2000);
+      } catch (err) {
+        pasteStatus.textContent = err.message ?? "图片上传失败";
+      }
+      break;
+    }
+  });
+
+  document.getElementById("publish-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("publish-error");
+    const ok = document.getElementById("publish-success");
+    err.hidden = true;
+    ok.hidden = true;
+
+    const payload = {
+      title: document.getElementById("title").value.trim(),
+      slug: document.getElementById("slug").value.trim().toLowerCase(),
+      description: document.getElementById("description").value.trim(),
+      body: document.getElementById("body").value.trim(),
+    };
+
+    const res = await fetch("/api/articles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      err.textContent = data.error ?? "发布失败";
+      err.hidden = false;
+      return;
+    }
+
+    ok.textContent = data.message ?? "文章已发布成功。";
+    ok.hidden = false;
+    document.getElementById("publish-form")?.reset();
+    slugTouched = false;
+  });
+</script>

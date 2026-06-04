@@ -1,0 +1,263 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+if (user.role !== "admin") {
+  return Astro.redirect("/");
+}
+---
+
+<BaseLayout title="从 X 导入文章">
+  <h1 class="page-title">从 X 导入文章</h1>
+  <p class="page-lead">
+    从 @LMDFinance 导入 X 长文与 #老马行业研究 相关帖子，图片会自动下载并写入文章。
+    系统已开启<strong>每小时自动同步</strong>（每次最多导入 3 篇新帖），也可在此手动预览导入。
+  </p>
+
+  <div id="sync-status" class="card import-sync-status" style="margin-top: 1rem">
+    <div class="import-list-header">
+      <h2 style="margin: 0">自动同步状态</h2>
+      <button type="button" class="btn btn--ghost btn--sm" id="run-sync-btn">立即同步</button>
+    </div>
+    <p id="sync-status-text" class="import-meta">加载中…</p>
+  </div>
+
+  <div class="card" style="margin-top: 1.5rem">
+    <h2 style="margin-top: 0">按链接导入</h2>
+    <div class="form-group">
+      <label for="import-url">X 帖子链接或推文 ID</label>
+      <input
+        id="import-url"
+        type="url"
+        placeholder="https://x.com/LMDFinance/status/2055284201147215992"
+      />
+    </div>
+    <button type="button" class="btn" id="preview-url-btn">预览</button>
+  </div>
+
+  <div id="preview-panel" class="card import-preview" hidden style="margin-top: 1rem">
+    <h2 style="margin-top: 0">导入预览</h2>
+    <div class="form-group">
+      <label for="import-title">标题</label>
+      <input id="import-title" />
+    </div>
+    <div class="form-group">
+      <label for="import-slug">文章链接名</label>
+      <input id="import-slug" pattern="[a-z0-9]+(-[a-z0-9]+)*" />
+    </div>
+    <div class="form-group">
+      <label for="import-description">摘要</label>
+      <input id="import-description" />
+    </div>
+    <p id="import-meta" class="import-meta"></p>
+    <p id="import-body-preview" class="import-body-preview"></p>
+    <button type="button" class="btn" id="confirm-import-btn">确认导入</button>
+  </div>
+
+  <div class="card" style="margin-top: 1.5rem">
+    <div class="import-list-header">
+      <h2 style="margin: 0">时间线 · 投研相关</h2>
+      <button type="button" class="btn btn--ghost btn--sm" id="refresh-list-btn">刷新</button>
+    </div>
+    <p id="list-status" class="import-meta">加载中…</p>
+    <ul id="timeline-list" class="import-list"></ul>
+  </div>
+
+  <p id="import-error" class="alert alert--error" hidden style="margin-top: 1rem"></p>
+  <p id="import-success" class="alert alert--success" hidden style="margin-top: 1rem"></p>
+
+  <p style="margin-top: 1.5rem">
+    <a href="/admin">← 返回管理后台</a>
+    ·
+    <a href="/admin/new-post">手动发布文章</a>
+  </p>
+</BaseLayout>
+
+<script>
+  let currentPreview = null;
+
+  const errEl = document.getElementById("import-error");
+  const okEl = document.getElementById("import-success");
+
+  function showError(msg) {
+    errEl.textContent = msg;
+    errEl.hidden = false;
+    okEl.hidden = true;
+  }
+
+  function showSuccess(msg) {
+    okEl.textContent = msg;
+    okEl.hidden = false;
+    errEl.hidden = true;
+  }
+
+  function hideAlerts() {
+    errEl.hidden = true;
+    okEl.hidden = true;
+  }
+
+  function fillPreview(preview) {
+    currentPreview = preview;
+    document.getElementById("import-title").value = preview.title;
+    document.getElementById("import-slug").value = preview.slug;
+    document.getElementById("import-description").value = preview.description ?? "";
+    document.getElementById("import-meta").textContent =
+      `${preview.kind === "article" ? "X 长文" : preview.kind === "thread" ? "推文串" : "推文"} · ${preview.pubDate} · ${preview.imageCount} 张图片` +
+      (preview.alreadyImported ? " · 可能已导入" : "");
+    document.getElementById("import-body-preview").textContent = preview.bodyPreview;
+    document.getElementById("preview-panel").hidden = false;
+  }
+
+  async function previewUrl() {
+    hideAlerts();
+    const url = document.getElementById("import-url").value.trim();
+    if (!url) {
+      showError("请填写 X 链接");
+      return;
+    }
+    const res = await fetch(`/api/twitter/preview?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      showError(data.error ?? "预览失败");
+      return;
+    }
+    fillPreview(data.preview);
+  }
+
+  async function confirmImport() {
+    hideAlerts();
+    if (!currentPreview) return;
+
+    const btn = document.getElementById("confirm-import-btn");
+    btn.disabled = true;
+    btn.textContent = "导入中…";
+
+    const payload = {
+      url: currentPreview.sourceUrl,
+      slug: document.getElementById("import-slug").value.trim().toLowerCase(),
+      title: document.getElementById("import-title").value.trim(),
+      description: document.getElementById("import-description").value.trim(),
+    };
+
+    const res = await fetch("/api/twitter/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    btn.disabled = false;
+    btn.textContent = "确认导入";
+
+    if (!res.ok) {
+      showError(data.error ?? "导入失败");
+      return;
+    }
+
+    showSuccess(data.message ?? "导入成功");
+    loadTimeline();
+  }
+
+  function renderTimelineItem(preview) {
+    const li = document.createElement("li");
+    li.className = "import-list__item";
+    li.innerHTML = `
+      <div class="import-list__main">
+        <strong>${escapeHtml(preview.title)}</strong>
+        <span class="import-list__meta">${preview.pubDate} · ${preview.imageCount} 图 · ${preview.kind}</span>
+        ${preview.alreadyImported ? '<span class="pill pill--muted">已存在</span>' : ""}
+      </div>
+      <button type="button" class="btn btn--sm import-list__btn" data-url="${escapeAttr(preview.sourceUrl)}">
+        ${preview.alreadyImported ? "再次导入" : "导入"}
+      </button>
+    `;
+    li.querySelector(".import-list__btn")?.addEventListener("click", async (e) => {
+      const url = e.currentTarget.getAttribute("data-url");
+      document.getElementById("import-url").value = url;
+      await previewUrl();
+      document.getElementById("preview-panel").scrollIntoView({ behavior: "smooth" });
+    });
+    return li;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function escapeAttr(s) {
+    return s.replace(/"/g, "&quot;");
+  }
+
+  async function loadTimeline() {
+    const statusEl = document.getElementById("list-status");
+    const listEl = document.getElementById("timeline-list");
+    statusEl.textContent = "加载中…";
+    listEl.innerHTML = "";
+
+    const res = await fetch("/api/twitter/preview?count=50");
+    const data = await res.json();
+
+    if (!res.ok) {
+      statusEl.textContent = data.error ?? "加载失败";
+      return;
+    }
+
+    if (!data.previews?.length) {
+      statusEl.textContent = "未找到符合条件的投研帖子";
+      return;
+    }
+
+    statusEl.textContent = `共 ${data.previews.length} 篇可导入`;
+    for (const preview of data.previews) {
+      listEl.appendChild(renderTimelineItem(preview));
+    }
+  }
+
+  async function loadSyncStatus() {
+    const el = document.getElementById("sync-status-text");
+    const res = await fetch("/api/twitter/sync");
+    const data = await res.json();
+    if (!res.ok) {
+      el.textContent = data.error ?? "无法加载同步状态";
+      return;
+    }
+    const enabled = data.autoSyncEnabled ? "已开启（每小时）" : "已关闭";
+    const run = data.latest;
+    if (!run) {
+      el.textContent = `自动同步：${enabled} · 尚无同步记录`;
+      return;
+    }
+    const when = run.finished_at ?? run.started_at;
+    const err = run.error ? ` · 错误：${run.error}` : "";
+    el.textContent =
+      `自动同步：${enabled} · 上次 ${when}：扫描 ${run.scanned}，导入 ${run.imported}，跳过 ${run.skipped}，失败 ${run.failed}${err}`;
+  }
+
+  async function runSyncNow() {
+    hideAlerts();
+    const btn = document.getElementById("run-sync-btn");
+    btn.disabled = true;
+    btn.textContent = "同步中…";
+    const res = await fetch("/api/twitter/sync", { method: "POST" });
+    const data = await res.json();
+    btn.disabled = false;
+    btn.textContent = "立即同步";
+    if (!res.ok) {
+      showError(data.error ?? "同步失败");
+      return;
+    }
+    showSuccess(data.message ?? "同步完成");
+    loadSyncStatus();
+    loadTimeline();
+  }
+
+  document.getElementById("preview-url-btn")?.addEventListener("click", previewUrl);
+  document.getElementById("confirm-import-btn")?.addEventListener("click", confirmImport);
+  document.getElementById("refresh-list-btn")?.addEventListener("click", loadTimeline);
+  document.getElementById("run-sync-btn")?.addEventListener("click", runSyncNow);
+  loadSyncStatus();
+  loadTimeline();
+</script>

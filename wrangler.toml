@@ -1,0 +1,21 @@
+name = "laomatouziyanjiu"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "blog-db"
+database_id = "80b54929-be1d-4360-92e2-9ed095a5e08b"
+
+# Cron：Pages 项目请在 GitHub Actions（.github/workflows/twitter-sync.yml）触发同步
+# 或在 Cloudflare Dashboard → Workers & Pages → Cron 中配置
+
+[vars]
+# Set real values in Cloudflare Dashboard → Settings → Environment variables
+# JWT_SECRET = "change-me-in-production"
+# GITHUB_OWNER = "your-github-username"
+# GITHUB_REPO = "laomatouziyanjiu"
+# GITHUB_BRANCH = "main"
+# CRON_SECRET = "random-secret-for-scheduled-sync"
+# TWITTER_SYNC_DISABLED = "0"

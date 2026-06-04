@@ -1,0 +1,35 @@
+{
+  "name": "laomatouziyanjiu",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "wrangler pages dev dist",
+    "db:migrate:local": "wrangler d1 execute blog-db --local --file=./schema.sql",
+    "db:migrate": "wrangler d1 execute blog-db --file=./schema.sql",
+    "db:migrate:page-views:local": "wrangler d1 execute blog-db --local --file=./migrations/004_page_views.sql",
+    "db:migrate:page-views": "wrangler d1 execute blog-db --remote --file=./migrations/004_page_views.sql",
+    "db:migrate:twitter-sync:local": "wrangler d1 execute blog-db --local --file=./migrations/005_twitter_sync.sql",
+    "db:migrate:twitter-sync": "wrangler d1 execute blog-db --remote --file=./migrations/005_twitter_sync.sql",
+    "db:backfill:twitter-imports": "node scripts/backfill-twitter-imports.mjs > migrations/005_twitter_sync_backfill.sql",
+    "db:seed:local": "wrangler d1 execute blog-db --local --file=./seed.sql",
+    "import:twitter": "node scripts/import-twitter-articles.mjs",
+    "repair:twitter-media": "node scripts/repair-twitter-media.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^12.6.12",
+    "astro": "^5.16.4",
+    "bcryptjs": "^2.4.3",
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250604.0",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.19.0"
+  }
+}

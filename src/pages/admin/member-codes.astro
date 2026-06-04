@@ -1,0 +1,226 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getEnv } from "../../lib/env";
+import { listMemberContacts } from "../../lib/member-contacts";
+import { MEMBER_DURATION_DAYS } from "../../lib/member";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+if (user.role !== "admin") {
+  return Astro.redirect("/");
+}
+
+let contacts = [];
+try {
+  const env = getEnv(Astro);
+  contacts = await listMemberContacts(env.DB);
+} catch {
+  contacts = [];
+}
+---
+
+<BaseLayout title="会员码管理">
+  <h1 class="page-title">会员码管理</h1>
+  <p class="page-lead">
+    生成会员码并指定对接联系人。会员码一次性使用，激活后有效期
+    <strong>{MEMBER_DURATION_DAYS} 天</strong>。
+  </p>
+
+  <div class="card" style="margin-top: 1.5rem; max-width: 520px">
+    <h2 style="margin-top: 0">生成新会员码</h2>
+    <form id="create-code-form">
+      <div class="form-group">
+        <label for="contact-id">对接联系人</label>
+        <select id="contact-id" name="contactId" required disabled={contacts.length === 0}>
+          {contacts.length ? (
+            contacts.map((c) => (
+              <option value={c.id}>{c.name}（{c.role}）</option>
+            ))
+          ) : (
+            <option value="">请先在「管理对接联系人」中添加</option>
+          )}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="note">备注（可选）</label>
+        <input id="note" name="note" placeholder="例如：张三 / 2026年6月" />
+      </div>
+      <p id="create-error" class="alert alert--error" hidden></p>
+      <p id="create-success" class="alert alert--success" hidden></p>
+      <button type="submit" class="btn" disabled={contacts.length === 0}>生成会员码</button>
+    </form>
+  </div>
+
+  <div class="card" style="margin-top: 1.5rem">
+    <h2 style="margin-top: 0">最近会员码</h2>
+    <p id="codes-loading" style="color: var(--ink-muted)">加载中…</p>
+    <div id="codes-empty" hidden style="color: var(--ink-muted)">暂无会员码</div>
+    <div class="table-wrap" id="codes-table-wrap" hidden>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>会员码</th>
+            <th>对接人</th>
+            <th>状态</th>
+            <th>备注</th>
+            <th>创建时间</th>
+          </tr>
+        </thead>
+        <tbody id="codes-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <p style="margin-top: 1.5rem">
+    <a href="/admin/member-contacts">管理对接联系人</a>
+    <span style="margin: 0 0.5rem">·</span>
+    <a href="/admin">← 返回管理后台</a>
+  </p>
+</BaseLayout>
+
+<script>
+  const statusLabel = {
+    unused: "未使用",
+    active: "使用中",
+    expired: "已过期",
+  };
+
+  async function loadCodes() {
+    const loading = document.getElementById("codes-loading");
+    const empty = document.getElementById("codes-empty");
+    const wrap = document.getElementById("codes-table-wrap");
+    const body = document.getElementById("codes-body");
+
+    try {
+      const res = await fetch("/api/member/codes");
+      const data = await res.json();
+      loading.hidden = true;
+
+      if (!res.ok) {
+        empty.textContent = data.error ?? "加载失败";
+        empty.hidden = false;
+        return;
+      }
+
+      const codes = data.codes ?? [];
+      const options = data.contactOptions ?? [];
+      const select = document.getElementById("contact-id");
+      if (select && options.length) {
+        select.innerHTML = options
+          .map((c) => `<option value="${c.id}">${c.name}（${c.role}）</option>`)
+          .join("");
+      }
+
+      if (!codes.length) {
+        empty.hidden = false;
+        return;
+      }
+
+      wrap.hidden = false;
+      body.innerHTML = codes
+        .map(
+          (row) => `
+        <tr>
+          <td><code>${row.code}</code></td>
+          <td>${row.contact?.name ?? row.contact_id}</td>
+          <td><span class="badge badge--${row.status}">${statusLabel[row.status] ?? row.status}</span></td>
+          <td>${row.note ?? "—"}</td>
+          <td>${new Date(row.created_at).toLocaleString("zh-CN")}</td>
+        </tr>
+      `
+        )
+        .join("");
+    } catch {
+      loading.hidden = true;
+      empty.textContent = "加载失败";
+      empty.hidden = false;
+    }
+  }
+
+  document.getElementById("create-code-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("create-error");
+    const ok = document.getElementById("create-success");
+    err.hidden = true;
+    ok.hidden = true;
+
+    const contactId = document.getElementById("contact-id").value;
+    const note = document.getElementById("note").value;
+
+    const res = await fetch("/api/member/codes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId, note }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      err.textContent = data.error ?? "生成失败";
+      err.hidden = false;
+      return;
+    }
+
+    ok.textContent = `已生成：${data.code.code}（对接 ${data.contact.name}）— 请复制发给会员`;
+    ok.hidden = false;
+    document.getElementById("note").value = "";
+    loadCodes();
+  });
+
+  loadCodes();
+</script>
+
+<style>
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 0.65rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .data-table th {
+    color: var(--ink-muted);
+    font-weight: 500;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+  }
+
+  .badge--unused {
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  .badge--active {
+    background: rgba(76, 175, 80, 0.15);
+    color: #81c784;
+  }
+
+  .badge--expired {
+    background: rgba(139, 155, 184, 0.15);
+    color: var(--ink-muted);
+  }
+
+  .alert--success {
+    color: #81c784;
+    background: rgba(76, 175, 80, 0.1);
+    border: 1px solid rgba(76, 175, 80, 0.25);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
+  }
+</style>

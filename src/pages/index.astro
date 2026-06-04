@@ -1,0 +1,103 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import CommunityCta from "../components/CommunityCta.astro";
+import { blogArticlePath, getViewCountsByPaths } from "../lib/analytics";
+import { getEnv } from "../lib/env";
+
+export const prerender = false;
+
+const posts = (await getCollection("blog"))
+  .filter((p) => !p.data.draft && p.data.category !== "公告")
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+
+const featured = posts[0];
+const rest = posts.slice(1);
+
+let viewCounts = new Map<string, number>();
+try {
+  const env = getEnv(Astro);
+  const paths = posts.map((post) => blogArticlePath(post.id));
+  viewCounts = await getViewCountsByPaths(env.DB, paths);
+} catch {
+  viewCounts = new Map();
+}
+
+function formatViews(count: number): string {
+  return count.toLocaleString("zh-CN");
+}
+
+function viewsFor(slug: string): number {
+  return viewCounts.get(blogArticlePath(slug)) ?? 0;
+}
+---
+
+<BaseLayout title="老马投资研究">
+  <section class="hero">
+    <div class="hero__eyebrow">独立投研</div>
+    <h1>周期 · 科技 · 产业化</h1>
+    <p class="hero__lead">
+      一个专职投资者的思考与记录。股评、行业投研、美股观察与财务人生 —
+      尊重趋势，赢在策略而非技术。内容仅供参考，不构成投资建议。
+    </p>
+    <div class="hero__tags">
+      <span class="pill pill--gold">#老马行业研究</span>
+      <span class="pill">#老马股市评论</span>
+      <span class="pill">#老马美股研究</span>
+      <span class="pill">#老马财务人生</span>
+    </div>
+    <CommunityCta variant="hero" />
+  </section>
+
+  {featured && (
+    <section style="margin-bottom: 2.5rem">
+      <h2 class="section-title">最新研报</h2>
+      <a href={`/blog/${featured.id}`} class="post-card">
+        <div class="post-card__meta">
+          <span class="pill pill--category">{featured.data.category ?? "投研"}</span>
+          <span class="pill pill--gold">精选</span>
+        </div>
+        <h2>{featured.data.title}</h2>
+        {featured.data.description && <p>{featured.data.description}</p>}
+        <div class="post-card__date">
+          {featured.data.pubDate.toLocaleDateString("zh-CN", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
+          {featured.data.author && ` · ${featured.data.author}`}
+          · {formatViews(viewsFor(featured.id))} 次阅读
+        </div>
+      </a>
+    </section>
+  )}
+
+  {rest.length > 0 && (
+    <section>
+      <h2 class="section-title">往期研究</h2>
+      <ul class="post-list">
+        {rest.map((post) => (
+          <li>
+            <a href={`/blog/${post.id}`} class="post-card">
+              <div class="post-card__meta">
+                <span class="pill pill--category">{post.data.category ?? "投研"}</span>
+              </div>
+              <h2>{post.data.title}</h2>
+              {post.data.description && <p>{post.data.description}</p>}
+              <div class="post-card__date">
+                {post.data.pubDate.toLocaleDateString("zh-CN", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+                · {formatViews(viewsFor(post.id))} 次阅读
+              </div>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
+
+  {posts.length === 0 && <p style="color: var(--ink-muted)">暂无文章。</p>}
+</BaseLayout>
