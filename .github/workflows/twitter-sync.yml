@@ -20,6 +20,7 @@ jobs:
           fi
           res=$(curl -sS -w "\n%{http_code}" -X POST "${SITE_URL}/api/twitter/sync" \
             -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Origin: ${SITE_URL}" \
             -H "Content-Type: application/json")
           code=$(echo "$res" | tail -n1)
           body=$(echo "$res" | sed '$d')

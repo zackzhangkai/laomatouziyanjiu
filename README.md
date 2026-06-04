@@ -65,23 +65,16 @@ wrangler pages deploy dist --project-name=laomatouziyanjiu
 
 ### 自动同步（生产环境）
 
-部署到 Cloudflare Pages 后，Worker **每小时**拉取 @LMDFinance 时间线，自动导入新的 X 长文与 `#老马行业研究` 帖子（每轮最多 3 篇），经 GitHub API 写入仓库并触发重新构建。
+部署到 Cloudflare Pages 后，**GitHub Actions 每小时**调用 `POST /api/twitter/sync`，拉取 @LMDFinance 时间线并自动导入新的 X 长文与 `#老马行业研究` 帖子（每轮最多 3 篇），经 GitHub API 写入仓库并触发重新构建。
 
-首次启用前请执行：
+生产环境需配置：
 
-```bash
-npm run db:migrate:twitter-sync          # 远程 D1
-npm run db:backfill:twitter-imports      # 生成回填 SQL
-wrangler d1 execute blog-db --remote --file=./migrations/005_twitter_sync_backfill.sql
-```
-
-在 Cloudflare Dashboard 配置环境变量（若尚未设置）：
-
-- `GITHUB_TOKEN` / `GITHUB_OWNER` / `GITHUB_REPO` / `GITHUB_BRANCH`
-- `CRON_SECRET`（可选，供外部触发 `POST /api/twitter/sync`）
+- Cloudflare Pages 密钥：`JWT_SECRET`、`GITHUB_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO`、`CRON_SECRET`
+- GitHub 仓库 Secrets：`CRON_SECRET`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`（用于自动部署 workflow）
+- D1 迁移：`migrations/005_twitter_sync.sql` 与 `005_twitter_sync_backfill.sql`（已导入历史推文 ID 防重复）
 - `TWITTER_SYNC_DISABLED=1` 可关闭自动同步
 
-本地开发不会触发 Cron；可在管理后台 `/admin/import-twitter` 点击「立即同步」测试。
+本地开发不会触发定时任务；可在管理后台 `/admin/import-twitter` 点击「立即同步」测试。
 
 ### 手动导入
 
