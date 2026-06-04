@@ -54,12 +54,15 @@ npm run db:migrate:page-views
 
 ### 4. 构建与部署
 
+**自动部署（推荐）**：推送到 `main` 后，GitHub Actions [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) 会自动 `npm run build` 并部署到 Cloudflare Pages。仓库需配置 Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。
+
+**手动部署**：
+
 ```bash
-npm run build
-wrangler pages deploy dist --project-name=laomatouziyanjiu
+npm run deploy
 ```
 
-或在 Cloudflare Dashboard 连接 GitHub 仓库，构建命令 `npm run build`，输出目录 `dist`，并绑定 D1 数据库。
+生产站点：https://laomatouziyanjiu.pages.dev
 
 ## 从 X 导入文章
 

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=laomatouziyanjiu --branch=main --commit-dirty=true",
     "preview": "wrangler pages dev dist",
     "db:migrate:local": "wrangler d1 execute blog-db --local --file=./schema.sql",
     "db:migrate": "wrangler d1 execute blog-db --file=./schema.sql",
