@@ -72,6 +72,11 @@ function formatNum(n: number): string {
             <p class="admin-stat-card__value">{formatNum(stats.comments.total)}</p>
             <p class="admin-stat-card__meta">全站评论总数</p>
           </div>
+          <div class="admin-stat-card">
+            <p class="admin-stat-card__label">点赞</p>
+            <p class="admin-stat-card__value">{formatNum(stats.likes.total)}</p>
+            <p class="admin-stat-card__meta">全站文章点赞总数</p>
+          </div>
         </div>
 
         {stats.pageViews.topArticles.length > 0 && (
@@ -83,6 +88,7 @@ function formatNum(n: number): string {
                   <tr>
                     <th>文章</th>
                     <th>浏览量</th>
+                    <th>点赞</th>
                     <th>评论</th>
                   </tr>
                 </thead>
@@ -95,6 +101,7 @@ function formatNum(n: number): string {
                         </a>
                       </td>
                       <td>{formatNum(row.views)}</td>
+                      <td>{formatNum(row.likeCount)}</td>
                       <td>{formatNum(row.commentCount)}</td>
                     </tr>
                   ))}

@@ -5,6 +5,7 @@ import { getCollection, render } from "astro:content";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import CommentSection from "../../components/CommentSection.astro";
 import CommunityCta from "../../components/CommunityCta.astro";
+import ArticleEngagement from "../../components/ArticleEngagement.astro";
 
 export async function getStaticPaths() {
   const posts = await getCollection("blog");
@@ -45,6 +46,7 @@ const dateStr = post.data.pubDate.toLocaleDateString("zh-CN", {
         <span><strong>日期</strong> {dateStr}</span>
         <span><strong>栏目</strong> {post.data.category ?? "行业研究"}</span>
       </div>
+      <ArticleEngagement articleId={articleId} />
       {post.data.source && (
         <p class="report-source">
           原文：<a href={post.data.source} target="_blank" rel="noopener noreferrer">X @LMDFinance</a>

@@ -1,0 +1,134 @@
+---
+interface Props {
+  articleId: string;
+  views?: number;
+  likes?: number;
+  liked?: boolean;
+  compact?: boolean;
+}
+
+const {
+  articleId,
+  views = 0,
+  likes = 0,
+  liked = false,
+  compact = false,
+} = Astro.props;
+---
+
+<div
+  class:list={["article-engagement", compact && "article-engagement--compact"]}
+  data-article-engagement
+  data-article-id={articleId}
+  data-liked={liked ? "true" : "false"}
+>
+  <span class="article-engagement__views" data-stat="views">
+    {views.toLocaleString("zh-CN")} 次阅读
+  </span>
+  <button
+    type="button"
+    class:list={["article-engagement__like", liked && "is-liked"]}
+    data-action="like"
+    aria-pressed={liked ? "true" : "false"}
+    aria-label={liked ? "已点赞" : "点赞"}
+  >
+    <span class="article-engagement__like-icon" aria-hidden="true">♥</span>
+    <span data-stat="likes">{likes.toLocaleString("zh-CN")}</span>
+  </button>
+</div>
+
+<script>
+  function formatCount(n: number): string {
+    return n.toLocaleString("zh-CN");
+  }
+
+  function applyStats(
+    root: HTMLElement,
+    stats: { views: number; likes: number; liked?: boolean }
+  ) {
+    const viewsEl = root.querySelector('[data-stat="views"]');
+    const likesEl = root.querySelector('[data-stat="likes"]');
+    const likeBtn = root.querySelector('[data-action="like"]');
+
+    if (viewsEl) viewsEl.textContent = `${formatCount(stats.views)} 次阅读`;
+    if (likesEl) likesEl.textContent = formatCount(stats.likes);
+
+    if (likeBtn instanceof HTMLButtonElement) {
+      const isLiked = Boolean(stats.liked);
+      likeBtn.classList.toggle("is-liked", isLiked);
+      likeBtn.setAttribute("aria-pressed", isLiked ? "true" : "false");
+      likeBtn.setAttribute("aria-label", isLiked ? "已点赞" : "点赞");
+      root.dataset.liked = isLiked ? "true" : "false";
+    }
+  }
+
+  async function refreshEngagement(ids: string[]) {
+    if (ids.length === 0) return;
+    const res = await fetch("/api/articles/stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) return;
+    const { stats } = await res.json();
+    for (const id of ids) {
+      const root = document.querySelector<HTMLElement>(
+        `[data-article-engagement][data-article-id="${CSS.escape(id)}"]`
+      );
+      if (root && stats?.[id]) applyStats(root, stats[id]);
+    }
+  }
+
+  async function likeArticle(root: HTMLElement, articleId: string) {
+    if (root.dataset.liked === "true") return;
+
+    const likeBtn = root.querySelector<HTMLButtonElement>('[data-action="like"]');
+    if (likeBtn) likeBtn.disabled = true;
+
+    try {
+      const res = await fetch("/api/articles/like", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ articleId }),
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+
+      applyStats(root, {
+        views:
+          Number.parseInt(
+            root
+              .querySelector('[data-stat="views"]')
+              ?.textContent?.replace(/[^\d]/g, "") ?? "0",
+            10
+          ) || 0,
+        likes: data.likes ?? 0,
+        liked: true,
+      });
+    } finally {
+      if (likeBtn) likeBtn.disabled = false;
+    }
+  }
+
+  function initEngagement() {
+    const roots = [...document.querySelectorAll<HTMLElement>("[data-article-engagement]")];
+    if (roots.length === 0) return;
+
+    const ids = [...new Set(roots.map((root) => root.dataset.articleId).filter(Boolean) as string[])];
+    refreshEngagement(ids).catch(() => {});
+
+    for (const root of roots) {
+      const articleId = root.dataset.articleId;
+      if (!articleId) continue;
+
+      root.querySelector('[data-action="like"]')?.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        likeArticle(root, articleId).catch(() => {});
+      });
+    }
+  }
+
+  initEngagement();
+  document.addEventListener("astro:page-load", initEngagement);
+</script>

@@ -2,8 +2,10 @@
 import { getCollection } from "astro:content";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import CommunityCta from "../components/CommunityCta.astro";
-import { blogArticlePath, getViewCountsByPaths } from "../lib/analytics";
+import ArticleEngagement from "../components/ArticleEngagement.astro";
+import { getArticleEngagementByIds } from "../lib/analytics";
 import { getEnv } from "../lib/env";
+import { SOCIAL } from "../lib/social";
 
 export const prerender = false;
 
@@ -13,29 +15,45 @@ const posts = (await getCollection("blog"))
 
 const featured = posts[0];
 const rest = posts.slice(1);
-
-let viewCounts = new Map<string, number>();
+let engagementById = new Map<string, { views: number; likes: number; liked?: boolean }>();
 try {
   const env = getEnv(Astro);
-  const paths = posts.map((post) => blogArticlePath(post.id));
-  viewCounts = await getViewCountsByPaths(env.DB, paths);
+  const ids = posts.map((post) => post.id);
+  engagementById = await getArticleEngagementByIds(env.DB, ids);
 } catch {
-  viewCounts = new Map();
+  engagementById = new Map();
 }
 
-function formatViews(count: number): string {
-  return count.toLocaleString("zh-CN");
-}
-
-function viewsFor(slug: string): number {
-  return viewCounts.get(blogArticlePath(slug)) ?? 0;
+function statsFor(slug: string) {
+  return engagementById.get(slug) ?? { views: 0, likes: 0, liked: false };
 }
 ---
 
 <BaseLayout title="老马投资研究">
   <section class="hero">
-    <div class="hero__eyebrow">独立投研</div>
-    <h1>周期 · 科技 · 产业化</h1>
+    <div class="hero__top">
+      <a
+        href={SOCIAL.twitter.href}
+        class="hero__avatar-link"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`${SOCIAL.twitter.label} ${SOCIAL.twitter.handle}`}
+      >
+        <img
+          src="/images/lmdfinance-avatar.jpg"
+          alt={`${SOCIAL.twitter.handle} 头像`}
+          class="hero__avatar"
+          width="96"
+          height="96"
+          loading="eager"
+          decoding="async"
+        />
+      </a>
+      <div class="hero__intro">
+        <div class="hero__eyebrow">独立投研 · {SOCIAL.twitter.handle}</div>
+        <h1>周期 · 科技 · 产业化</h1>
+      </div>
+    </div>
     <p class="hero__lead">
       一个专职投资者的思考与记录。股评、行业投研、美股观察与财务人生 —
       尊重趋势，赢在策略而非技术。内容仅供参考，不构成投资建议。
@@ -52,23 +70,30 @@ function viewsFor(slug: string): number {
   {featured && (
     <section style="margin-bottom: 2.5rem">
       <h2 class="section-title">最新研报</h2>
-      <a href={`/blog/${featured.id}`} class="post-card">
-        <div class="post-card__meta">
-          <span class="pill pill--category">{featured.data.category ?? "投研"}</span>
-          <span class="pill pill--gold">精选</span>
-        </div>
-        <h2>{featured.data.title}</h2>
-        {featured.data.description && <p>{featured.data.description}</p>}
-        <div class="post-card__date">
-          {featured.data.pubDate.toLocaleDateString("zh-CN", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-          {featured.data.author && ` · ${featured.data.author}`}
-          · {formatViews(viewsFor(featured.id))} 次阅读
-        </div>
-      </a>
+      <div class="post-card-wrap">
+        <a href={`/blog/${featured.id}`} class="post-card">
+          <div class="post-card__meta">
+            <span class="pill pill--category">{featured.data.category ?? "投研"}</span>
+            <span class="pill pill--gold">精选</span>
+          </div>
+          <h2>{featured.data.title}</h2>
+          {featured.data.description && <p>{featured.data.description}</p>}
+          <div class="post-card__date">
+            {featured.data.pubDate.toLocaleDateString("zh-CN", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+            {featured.data.author && ` · ${featured.data.author}`}
+          </div>
+        </a>
+        <ArticleEngagement
+          articleId={featured.id}
+          views={statsFor(featured.id).views}
+          likes={statsFor(featured.id).likes}
+          liked={statsFor(featured.id).liked}
+        />
+      </div>
     </section>
   )}
 
@@ -78,21 +103,29 @@ function viewsFor(slug: string): number {
       <ul class="post-list">
         {rest.map((post) => (
           <li>
-            <a href={`/blog/${post.id}`} class="post-card">
-              <div class="post-card__meta">
-                <span class="pill pill--category">{post.data.category ?? "投研"}</span>
-              </div>
-              <h2>{post.data.title}</h2>
-              {post.data.description && <p>{post.data.description}</p>}
-              <div class="post-card__date">
-                {post.data.pubDate.toLocaleDateString("zh-CN", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-                · {formatViews(viewsFor(post.id))} 次阅读
-              </div>
-            </a>
+            <div class="post-card-wrap">
+              <a href={`/blog/${post.id}`} class="post-card">
+                <div class="post-card__meta">
+                  <span class="pill pill--category">{post.data.category ?? "投研"}</span>
+                </div>
+                <h2>{post.data.title}</h2>
+                {post.data.description && <p>{post.data.description}</p>}
+                <div class="post-card__date">
+                  {post.data.pubDate.toLocaleDateString("zh-CN", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </div>
+              </a>
+              <ArticleEngagement
+                articleId={post.id}
+                views={statsFor(post.id).views}
+                likes={statsFor(post.id).likes}
+                liked={statsFor(post.id).liked}
+                compact
+              />
+            </div>
           </li>
         ))}
       </ul>

@@ -1,3 +1,5 @@
+import { getLikeCountsByArticleIds, getTotalLikes } from "./likes";
+
 export function blogArticlePath(slug: string): string {
   return `/blog/${slug}`;
 }
@@ -40,6 +42,12 @@ export async function recordPageView(
     .run();
 }
 
+export interface ArticleEngagementStats {
+  views: number;
+  likes: number;
+  liked?: boolean;
+}
+
 export interface AdminStats {
   users: {
     total: number;
@@ -54,11 +62,17 @@ export interface AdminStats {
     active: number;
   };
   comments: { total: number };
+  likes: { total: number };
   pageViews: {
     today: number;
     total: number;
     last7Days: Array<{ date: string; views: number }>;
-    topArticles: Array<{ path: string; views: number; commentCount: number }>;
+    topArticles: Array<{
+      path: string;
+      views: number;
+      likeCount: number;
+      commentCount: number;
+    }>;
   };
 }
 
@@ -117,6 +131,34 @@ export async function getViewCountsByPaths(
     .all<{ path: string; views: number }>();
 
   return new Map((rows.results ?? []).map((row) => [row.path, row.views]));
+}
+
+export async function getArticleEngagementByIds(
+  db: D1Database,
+  articleIds: string[],
+  likedIds: Set<string> = new Set()
+): Promise<Map<string, ArticleEngagementStats>> {
+  if (articleIds.length === 0) return new Map();
+
+  const paths = articleIds.map((id) => blogArticlePath(id));
+  const [viewCounts, likeCounts] = await Promise.all([
+    getViewCountsByPaths(db, paths),
+    getLikeCountsByArticleIds(db, articleIds),
+  ]);
+
+  return new Map(
+    articleIds.map((id) => {
+      const path = blogArticlePath(id);
+      return [
+        id,
+        {
+          views: viewCounts.get(path) ?? 0,
+          likes: likeCounts.get(id) ?? 0,
+          liked: likedIds.has(id),
+        },
+      ];
+    })
+  );
 }
 
 export async function getAdminStats(db: D1Database): Promise<AdminStats> {
@@ -203,13 +245,18 @@ export async function getAdminStats(db: D1Database): Promise<AdminStats> {
 
   const topArticlePaths = topArticlesRows.results ?? [];
   const articleIds = topArticlePaths.map((row) => articleIdFromBlogPath(row.path));
-  const commentCounts = await getCommentCountsByArticleIds(db, articleIds);
+  const [commentCounts, likeCounts, likesTotal] = await Promise.all([
+    getCommentCountsByArticleIds(db, articleIds),
+    getLikeCountsByArticleIds(db, articleIds),
+    getTotalLikes(db),
+  ]);
   const topArticles = topArticlePaths.map((row) => {
     const path = normalizePageViewPath(row.path);
     const slug = articleIdFromBlogPath(path);
     return {
       path,
       views: row.views,
+      likeCount: likeCounts.get(slug) ?? 0,
       commentCount: commentCounts.get(slug) ?? 0,
     };
   });
@@ -228,6 +275,7 @@ export async function getAdminStats(db: D1Database): Promise<AdminStats> {
       active: codesRow?.active ?? 0,
     },
     comments: { total: commentsRow?.total ?? 0 },
+    likes: { total: likesTotal },
     pageViews: {
       today: viewsToday?.views ?? 0,
       total: viewsTotal?.views ?? 0,

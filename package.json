@@ -14,6 +14,8 @@
     "db:migrate:page-views": "wrangler d1 execute blog-db --remote --file=./migrations/004_page_views.sql",
     "db:migrate:twitter-sync:local": "wrangler d1 execute blog-db --local --file=./migrations/005_twitter_sync.sql",
     "db:migrate:twitter-sync": "wrangler d1 execute blog-db --remote --file=./migrations/005_twitter_sync.sql",
+    "db:migrate:article-likes:local": "wrangler d1 execute blog-db --local --file=./migrations/006_article_likes.sql",
+    "db:migrate:article-likes": "wrangler d1 execute blog-db --remote --file=./migrations/006_article_likes.sql",
     "db:backfill:twitter-imports": "node scripts/backfill-twitter-imports.mjs > migrations/005_twitter_sync_backfill.sql",
     "db:seed:local": "wrangler d1 execute blog-db --local --file=./seed.sql",
     "import:twitter": "node scripts/import-twitter-articles.mjs",
